@@ -158,7 +158,7 @@ class ImagePolice(commands.Cog):
 
 		images = await self._get_images_from_message(message)
 		for image, url in images:
-			db.store_image(image=image, image_link=url, source_url=message.jump_url)
+			db.store_image(image=image, image_link=url, source_url=message.jump_url, message_time=message.created_at)
 
 		return images
 
