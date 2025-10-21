@@ -1,0 +1,9 @@
+__pycache__/
+db/
+
+logs.txt
+BOT_TOKEN
+
+# Custom startup scripts
+kill_process.bat
+start_background.py
