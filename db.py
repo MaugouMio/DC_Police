@@ -46,7 +46,7 @@ class SharedVisionModels:
 
         # 1. DINOv2 模型
         logging.info("正在載入 DINOv2 (dinov2_vits14)...")
-        self.dinov2 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14').eval().to(self.device)
+        self.dinov2 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14', verbose=False).eval().to(self.device)
         self.transform = T.Compose([
             T.Resize((224, 224)),
             T.ToTensor(),
