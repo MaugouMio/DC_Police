@@ -272,7 +272,8 @@ class ImagePolice(commands.Cog):
 	@app_commands.checks.has_permissions(moderate_members=True)
 	async def shrink(self, interaction: discord.Interaction, days: int = 180):
 		db = self._get_db(interaction.guild_id)
-		if db.shrink(days=days):
+		ok = await asyncio.to_thread(db.shrink, days=days)
+		if ok:
 			await interaction.response.send_message(f"已成功刪除超過 {days} 天的圖片記錄", ephemeral=True)
 		else:
 			await interaction.response.send_message("縮減圖片資料庫時發生錯誤", ephemeral=True)
@@ -293,13 +294,12 @@ class ImagePolice(commands.Cog):
 			return  # 忽略私訊
 		
 		db = self._get_db(payload.guild_id)
-		db.delete_image(
-			_DISCORD_MSG_URL_TEMPLATE.format(
-				guild_id=payload.guild_id,
-				channel_id=payload.channel_id,
-				message_id=payload.message_id
-			)
+		msg_url = _DISCORD_MSG_URL_TEMPLATE.format(
+			guild_id=payload.guild_id,
+			channel_id=payload.channel_id,
+			message_id=payload.message_id
 		)
+		await asyncio.to_thread(db.delete_image, msg_url)
 
 	@commands.command()
 	async def sync(self, ctx: commands.Context):
