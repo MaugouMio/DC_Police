@@ -10,7 +10,7 @@ import logging
 import re
 import urllib.request
 
-from db import ImageData, ImageDHashDatabase
+from db import ImageData, ImageDatabase
 
 
 _arg_parser = argparse.ArgumentParser()
@@ -30,11 +30,11 @@ class MessageReference:
 class ImagePolice(commands.Cog):
 	def __init__(self, bot: commands.Bot):
 		self.bot = bot
-		self.db: dict[int, ImageDHashDatabase] = {}  # 每個伺服器一個資料庫
+		self.db: dict[int, ImageDatabase] = {}  # 每個伺服器一個資料庫
 	
-	def _get_db(self, guild_id: int) -> ImageDHashDatabase:
+	def _get_db(self, guild_id: int) -> ImageDatabase:
 		if guild_id not in self.db:
-			self.db[guild_id] = ImageDHashDatabase(db_name=f"db/{guild_id}/image_dhash.db")
+			self.db[guild_id] = ImageDatabase(db_dir=f"db/{guild_id}")
 		return self.db[guild_id]
 	
 	async def _get_image_by_attachment(self, attachment: discord.Attachment) -> bytes | None:
@@ -94,7 +94,7 @@ class ImagePolice(commands.Cog):
 		for data in image_datas:
 			embed = discord.Embed(
 				title=f"相似度: {data.similarity:.2f}%",
-				description=data.source_url,
+				description=f"{data.source_url}" + (f"\n特徵點匹配: {data.match_count} 點 (覆蓋率: {data.inlier_ratio:.1%})" if data.match_count > 0 else ""),
 			)
 			embed.set_image(url=data.image_link)
 			embeds.append(embed)
