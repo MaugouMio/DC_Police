@@ -103,7 +103,7 @@ class ImagePolice(commands.Cog):
 
 	async def _check_image(self, image: bytes, interaction: discord.Interaction):
 		db = self._get_db(interaction.guild_id)
-		similar_images = db.search_similar_images(image)
+		similar_images = await asyncio.to_thread(db.search_similar_images, image)
 
 		if similar_images:
 			response = "⚠️發現部分相似的圖片⚠️"
