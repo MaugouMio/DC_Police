@@ -3,7 +3,6 @@ import datetime
 import io
 import logging
 import os
-import re
 import sqlite3
 import threading
 from PIL import Image
@@ -19,11 +18,11 @@ except ImportError:
     LightGlue = None
     SuperPoint = None
 
-# 為了向下相容既有 imagehash
-try:
-    import imagehash
-except ImportError:
-    imagehash = None
+
+SIMILARITY_THRESHOLD: float = 0.2
+KEY_POINT_THRESHOLD: int = 128
+TOP_K: int = 3
+STAGE1_CANDIDATES: int = 50
 
 
 @dataclasses.dataclass(frozen=True)
@@ -236,14 +235,11 @@ class ImageDatabase:
         self,
         query_image: bytes,
         image_source: str | None = None,
-        similarity_threshold: float = 0.25,
-        top_k: int = 3,
-        stage1_candidates: int = 5
     ) -> list[ImageData]:
         """
         雙階段搜尋相似圖片：
-        Stage 1: DINOv2 + Faiss 粗篩候選 Top K
-        Stage 2: LightGlue 幾何特徵點精篩判定包含/相同
+        Stage 1: DINOv2 + Faiss 粗篩候選
+        Stage 2: LightGlue 幾何特徵點精篩判定包含/相同 (最多 K 個)
         """
         if self.index.ntotal == 0:
             return []
@@ -262,7 +258,7 @@ class ImageDatabase:
             return []
 
         # 2. Stage 1: Faiss 檢索
-        k = min(stage1_candidates, self.index.ntotal)
+        k = min(STAGE1_CANDIDATES, self.index.ntotal)
         scores, ids = self.index.search(query_emb, k)
 
         candidates = []
@@ -284,7 +280,7 @@ class ImageDatabase:
             for score, img_url, src_url, _ in candidates:
                 if score >= 0.85:
                     similar_images.append(ImageData(image_link=img_url, source_url=src_url, similarity=float(score * 100)))
-            return similar_images[:top_k]
+            return similar_images[:TOP_K]
 
         # 3. Stage 2: LightGlue 精篩
         similar_images: list[ImageData] = []
@@ -314,8 +310,8 @@ class ImageDatabase:
                 min_kpts = min(kpts0_count, kpts1_count)
                 inlier_ratio = (match_count / min_kpts) if min_kpts > 0 else 0.0
 
-                # 判定門檻：覆蓋率 >= 25% 或吻合特徵點 >= 50
-                is_duplicate = (inlier_ratio >= similarity_threshold) or (match_count >= 50)
+                # 判定門檻：覆蓋率 or 吻合特徵點 >= threshold
+                is_duplicate = (inlier_ratio >= SIMILARITY_THRESHOLD) or (match_count >= KEY_POINT_THRESHOLD)
                 if is_duplicate:
                     # 綜合計算相似度百分比
                     sim_pct = max(inlier_ratio * 100, float(vec_score * 100))
@@ -331,9 +327,9 @@ class ImageDatabase:
             except Exception:
                 logging.exception("LightGlue 比對圖片時發生錯誤: %s", thumb_path)
 
-        # 依相似度排序取出前 top_k
+        # 依相似度排序取出前 TOP_K
         similar_images.sort(key=lambda x: x.similarity, reverse=True)
-        return similar_images[:top_k]
+        return similar_images[:TOP_K]
 
     def shrink(self, days: int) -> bool:
         """刪除超過指定天數的圖片記錄"""
