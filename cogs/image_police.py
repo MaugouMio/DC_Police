@@ -92,9 +92,9 @@ class ImagePolice(commands.Cog):
 
 	def _generate_image_embeds(self, image_datas: Sequence[ImageData]) -> Sequence[discord.Embed]:
 		embeds = []
-		for data in image_datas:
+		for idx, data in enumerate(image_datas, start=1):
 			embed = discord.Embed(
-				title=f"相似度: {data.similarity:.2f}%",
+				title=(f"事證 {idx} | 相似度: {data.similarity:.2f}%" if len(image_datas) > 1 else f"相似度: {data.similarity:.2f}%"),
 				description=f"{data.source_url}" + (f"\n特徵點匹配: {data.match_count} 點 (覆蓋率: {data.inlier_ratio:.1%})" if data.match_count > 0 else ""),
 			)
 			embed.set_image(url=data.image_link)
@@ -235,10 +235,12 @@ class ImagePolice(commands.Cog):
 			response = "⚠️警方已掌握關鍵事證⚠️"
 			embeds = self._generate_image_embeds(similar_images)
 
-			view = discord.ui.View(timeout = 30)
-			button = discord.ui.Button(label = "提告")
-			button.callback = functools.partial(self._sue, defendant=message_reference.message, evidence=embeds)
-			view.add_item(button)
+			view = discord.ui.View(timeout=60)
+			for idx, embed in enumerate(embeds, start=1):
+				btn_label = f"以事證 {idx} 提告" if len(embeds) > 1 else "提告"
+				button = discord.ui.Button(label=btn_label, style=discord.ButtonStyle.danger)
+				button.callback = functools.partial(self._sue, defendant=message_reference.message, evidence=[embed])
+				view.add_item(button)
 
 			await interaction.followup.send(response, view=view, embeds=embeds)
 		else:
