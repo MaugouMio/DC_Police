@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 from collections.abc import Sequence
 import dataclasses
 import datetime
@@ -213,14 +214,23 @@ class ImagePolice(commands.Cog):
 		images = await self._get_images_from_message(message_reference.message)
 		db = self._get_db(message_reference.message.guild.id)
 
-		# 取出訊息中所有圖片的相關圖片
-		similar_images = set()
+		# 取出訊息中所有圖片的相關圖片 (透過 asyncio.to_thread 避免運算阻塞 Gateway)
+		similar_images_list = []
 		for image, _ in images:
-			similar_images = similar_images.union(db.search_similar_images(image, image_source=message_reference.message.jump_url))
+			found = await asyncio.to_thread(
+				db.search_similar_images,
+				image,
+				image_source=message_reference.message.jump_url
+			)
+			similar_images_list.extend(found)
 
-		if similar_images:
-			# 將結果依相似度重新排序
-			similar_images = sorted(similar_images, key=lambda x: x.similarity, reverse=True)
+		if similar_images_list:
+			# 依 source_url 去重並取最高相似度
+			unique_map = {}
+			for item in similar_images_list:
+				if item.source_url not in unique_map or item.similarity > unique_map[item.source_url].similarity:
+					unique_map[item.source_url] = item
+			similar_images = sorted(unique_map.values(), key=lambda x: x.similarity, reverse=True)
 
 			response = "⚠️警方已掌握關鍵事證⚠️"
 			embeds = self._generate_image_embeds(similar_images)
