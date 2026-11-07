@@ -56,7 +56,7 @@ class SharedVisionModels:
         if SuperPoint is not None and LightGlue is not None:
             logging.info("正在載入 SuperPoint 與 LightGlue...")
             self.extractor = SuperPoint(max_num_keypoints=1024).eval().to(self.device)
-            self.matcher = LightGlue(features='superpoint').eval().to(self.device)
+            self.matcher = LightGlue(features='superpoint', depth_confidence=0.95).eval().to(self.device)
         else:
             self.extractor = None
             self.matcher = None
@@ -288,24 +288,29 @@ class ImageDatabase:
             # 準備查詢圖片的張量
             img0_rgb = pil_img.convert("RGB")
             img0_tensor = T.functional.to_tensor(img0_rgb).unsqueeze(0).to(self.models.device)
-            feats0 = self.models.extractor.extract(img0_tensor)
+            with torch.inference_mode():
+                feats0 = self.models.extractor.extract(img0_tensor)
             kpts0_count = len(feats0['keypoints'][0])
         except Exception:
             logging.exception("提取查詢圖片特徵點時發生錯誤")
             return []
 
         for vec_score, img_url, src_url, thumb_path in candidates:
+            # 提早中止：若已收集滿 TOP_K 筆可直接結束
+            if len(similar_images) >= TOP_K:
+                break
             if not thumb_path or not os.path.exists(thumb_path):
                 continue
 
             try:
-                img1_tensor = load_image(thumb_path).to(self.models.device)
-                feats1 = self.models.extractor.extract(img1_tensor)
-                kpts1_count = len(feats1['keypoints'][0])
+                with torch.inference_mode():
+                    img1_tensor = load_image(thumb_path).to(self.models.device)
+                    feats1 = self.models.extractor.extract(img1_tensor)
+                    kpts1_count = len(feats1['keypoints'][0])
 
-                matches01 = self.models.matcher({'image0': feats0, 'image1': feats1})
-                matches = matches01['matches'][0]
-                match_count = len(matches)
+                    matches01 = self.models.matcher({'image0': feats0, 'image1': feats1})
+                    matches = matches01['matches'][0]
+                    match_count = len(matches)
 
                 min_kpts = min(kpts0_count, kpts1_count)
                 inlier_ratio = (match_count / min_kpts) if min_kpts > 0 else 0.0
